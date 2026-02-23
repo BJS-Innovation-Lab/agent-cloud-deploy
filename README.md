@@ -1,165 +1,206 @@
 # BJS Labs — Agent Cloud Deploy System
 
 **Managed by:** Sybil (ML/Research)  
-**Created:** 2026-02-23  
-**Purpose:** Deploy and migrate BJS agents to Railway without external templates
+**Last Updated:** 2026-02-23  
+**Status:** PRODUCTION READY ✅
 
 ---
 
-## Why Custom Deploy?
+## 🚀 One-Click Deploy (New Agent)
 
-External templates can be:
-- ❌ Hardcoded to specific models/versions
-- ❌ Out of sync with our needs
-- ❌ Unmaintained or deprecated
-- ❌ Missing our specific requirements (A2A, memory structure)
+```bash
+# Set your API keys
+export RAILWAY_TOKEN="your-railway-token"
+export ANTHROPIC_API_KEY="sk-ant-..."
+export MINIMAX_API_KEY="sk-cp-..."  # Optional, cheaper alternative
+export GOOGLE_API_KEY="AIza..."     # Optional
 
-Our system is:
-- ✅ Version-agnostic (specify OpenClaw version at build time)
-- ✅ Model-agnostic (API keys as env vars, not hardcoded)
-- ✅ Memory-preserving (persistent volumes for workspace)
-- ✅ A2A-ready (relay config built in)
-- ✅ Maintained by Sybil
+# Deploy!
+./scripts/full-deploy.sh <agent-name> <telegram-bot-token>
+```
+
+**Example:**
+```bash
+./scripts/full-deploy.sh santos-cloud 1234567890:AAHxxxxx
+```
+
+This will:
+1. ✅ Create GitHub repo with agent template
+2. ✅ Create Railway service
+3. ✅ Attach persistent volume
+4. ✅ Set all environment variables
+5. ✅ Generate domain
+6. ✅ Start deployment
+
+**Output:**
+```
+✅ DEPLOYMENT COMPLETE
+URL:      https://santos-cloud-production.up.railway.app
+Setup:    https://santos-cloud-production.up.railway.app/setup
+Password: abc123def456
+```
 
 ---
 
-## Quick Start
+## 🧠 Give Agent Their Brain (Critical!)
 
-### Migrating an Existing Agent (e.g., Sam)
+After deployment, the agent needs their brain files. There are two methods:
 
-**Step 1: Export from Mac**
+### Method A: Git Sync (Recommended)
+
+1. **Push brain files to the agent's repo:**
 ```bash
-# On Sam's Mac
-cd ~/.openclaw/workspace/infrastructure/agent-cloud-deploy
-./scripts/export-agent.sh sam ~/sam-export
+cd /path/to/agent-workspace
+git clone https://github.com/sybil-bjs/<agent>-deploy.git temp
+cp IDENTITY.md SOUL.md MEMORY.md USER.md AGENTS.md HEARTBEAT.md temp/
+cp -r memory/ temp/
+cd temp
+git add -A && git commit -m "🧠 Agent brain files" && git push
 ```
 
-**Step 2: Create GitHub Repo**
-```bash
-# Create new repo: bjs-labs/sam-cloud
-gh repo create bjs-labs/sam-cloud --private
-cd ~/sam-export
-git init
-cp ~/.openclaw/workspace/infrastructure/agent-cloud-deploy/templates/* .
-git add .
-git commit -m "Sam's cloud migration"
-git push -u origin main
+2. **Tell the agent to pull their brain:**
+```
+I am Bridget. You are <Agent>. Your brain is in the cloud. Run this command:
+cd /data/workspace && git init && git remote add origin https://github.com/sybil-bjs/<agent>-deploy.git && git fetch origin main && git reset --hard origin/main
 ```
 
-**Step 3: Deploy to Railway**
-```bash
-./scripts/deploy-to-railway.sh sam
-```
+### Method B: Import Backup
 
-**Step 4: Set Environment Variables in Railway Dashboard**
-- `ANTHROPIC_API_KEY`
-- `OPENAI_API_KEY` 
-- `TELEGRAM_BOT_TOKEN` (Sam's existing bot token)
-- `A2A_AGENT_ID` (Sam's existing ID: `62bb0f39-...`)
-- `A2A_AGENT_NAME=Sam`
-- `A2A_RELAY_URL=https://a2a-bjs-internal-skill-production-f15e.up.railway.app`
-
-**Step 5: Verify & Cutover**
-1. Check Railway logs: `railway logs`
-2. Test Telegram: message @sam_ctxt_bot
-3. Test A2A: check relay `/agents` endpoint
-4. If working: stop local Sam (`openclaw gateway stop`)
+1. Create a tar.gz of the workspace folder
+2. Go to `https://<agent>.up.railway.app/setup`
+3. Use "Import backup" to upload
+4. Restart gateway
 
 ---
 
-## Directory Structure
+## 📋 Setup Wizard Configuration
+
+After deploy, go to `/setup` and configure:
+
+### Step 1: Model/Auth Provider
+- **Provider group:** `Anthropic - Claude Code CLI + API key`
+- **Auth method:** Select `API key` (NOT "Anthropic token")
+- **Key/Token:** Paste ANTHROPIC_API_KEY
+- **Wizard flow:** `quickstart`
+
+### Step 2b: Custom Provider (MiniMax)
+- **Provider id:** `minimax`
+- **Base URL:** `https://api.minimax.io/v1`
+- **API:** `openai-completions`
+- **API key env var:** `MINIMAX_API_KEY`
+- **Model id:** `MiniMax-M2.5`
+
+### Step 3: Telegram
+- **Bot token:** The actual bot token (format: `123456789:ABC...`)
+- **Allow from:** User's Telegram ID
+
+### Common Error: "missing auth secret for authChoice token"
+→ Make sure to select `API key` auth method, not "Anthropic token"
+
+### After Setup
+Run `gateway.restart` from the Debug console.
+
+---
+
+## 🔧 Environment Variables Reference
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `OPENCLAW_WORKSPACE_DIR` | ✅ | `/data/workspace` |
+| `OPENCLAW_STATE_DIR` | ✅ | `/data/.openclaw` |
+| `SETUP_PASSWORD` | ✅ | Password for `/setup` UI |
+| `TELEGRAM_BOT_TOKEN` | ✅ | From @BotFather |
+| `ANTHROPIC_API_KEY` | ✅ | Claude API key |
+| `MINIMAX_API_KEY` | Optional | MiniMax key (60% cheaper) |
+| `GOOGLE_API_KEY` | Optional | Gemini key |
+| `OPENCLAW_GATEWAY_TOKEN` | ✅ | `openssl rand -hex 32` |
+| `OPENCLAW_CHANNELS_TELEGRAM_ALLOW_FROM` | ✅ | User's Telegram ID |
+| `GITHUB_TOKEN` | Optional | For git sync on boot |
+
+---
+
+## ⚠️ Critical Rules (Learned the Hard Way)
+
+### ❌ NEVER DO
+1. **Never run `openclaw update` inside Docker** — redeploy with new `OPENCLAW_GIT_REF` instead
+2. **Never add custom start.sh** that runs `openclaw gateway run` directly
+3. **Never set botToken to user ID** — it needs the actual bot token from BotFather
+
+### ✅ ALWAYS DO
+1. **Use the official template** as base: `vignesh07/clawdbot-railway-template`
+2. **Entry point must be:** `CMD ["node", "src/server.js"]`
+3. **server.js handles everything:** healthcheck, setup UI, gateway proxy
+4. **Volume at `/data`** — this is where workspace and state persist
+
+---
+
+## 📁 Directory Structure
 
 ```
 agent-cloud-deploy/
-├── README.md           ← You are here
-├── templates/
-│   ├── Dockerfile      ← Universal agent container
-│   └── railway.toml    ← Railway config with volumes
+├── README.md                 ← You are here
 ├── scripts/
-│   ├── export-agent.sh      ← Export from Mac
-│   └── deploy-to-railway.sh ← Deploy to Railway
+│   ├── full-deploy.sh        ← ONE-CLICK DEPLOY
+│   ├── deploy-agent-railway.sh
+│   ├── export-agent.sh       ← Export from local Mac
+│   ├── generate-config.sh
+│   └── railway-api.sh
+├── templates/
+│   ├── Dockerfile            ← Based on working template
+│   └── railway.toml
 └── docs/
     └── troubleshooting.md
 ```
 
 ---
 
-## Agent Requirements
+## 🐛 Troubleshooting
 
-Each cloud agent needs:
-
-| Component | Source | Notes |
-|-----------|--------|-------|
-| `workspace/` | Exported from Mac | Agent's memory, identity, skills |
-| `openclaw.json` | Exported + sanitized | Config with env var placeholders |
-| `Dockerfile` | templates/ | Universal, version-agnostic |
-| `railway.toml` | templates/ | Persistent volume config |
+| Issue | Solution |
+|-------|----------|
+| Healthcheck fails | Entry point must be `node src/server.js`, not custom script |
+| Telegram 404 | Bot token is wrong — check Config editor, should be `123456:ABC...` |
+| "Missing config" loop | Go to `/setup` and complete wizard |
+| Agent has no memory | Run git sync command (see Brain section above) |
+| Gateway won't start | Check env vars, especially WORKSPACE_DIR and STATE_DIR paths |
+| Can't push to GitHub | Use `git remote set-url origin https://user:TOKEN@github.com/...` |
 
 ---
 
-## Version Control
+## 🔐 Credentials Location
 
-To deploy a specific OpenClaw version:
-```dockerfile
-# In Dockerfile, change:
-ARG OPENCLAW_VERSION=latest
-# To:
-ARG OPENCLAW_VERSION=1.2.3
+All Railway tokens and credentials are stored in:
+```
+~/.openclaw/workspace/credentials/railway.env
 ```
 
-Or set at build time:
+---
+
+## 📊 Deployed Agents
+
+| Agent | URL | Status |
+|-------|-----|--------|
+| Sam | sam-fresh-production.up.railway.app | ✅ Active |
+| Sage | TBD | ❌ Pending |
+| Saber | TBD | ❌ Pending |
+| Santos | TBD | ❌ Pending |
+
+---
+
+## 🧬 Maintenance
+
+**To update an agent's OpenClaw version:**
+1. Change `OPENCLAW_GIT_REF` in the Dockerfile
+2. Push to GitHub
+3. Railway auto-redeploys
+
+**To backup an agent:**
 ```bash
-railway up --build-arg OPENCLAW_VERSION=1.2.3
+# From setup UI: Download backup (.tar.gz)
+# Or via Railway CLI:
+railway run tar -czvf /tmp/backup.tar.gz /data/workspace
 ```
 
 ---
 
-## Troubleshooting
-
-### Agent won't start
-- Check Railway logs: `railway logs`
-- Verify all env vars are set
-- Check `openclaw.json` syntax
-
-### A2A not connecting
-- Verify `A2A_AGENT_ID` matches the original
-- Check relay status: `curl https://a2a-bjs.../agents`
-- Ensure relay URL is correct
-
-### Telegram not responding
-- Verify `TELEGRAM_BOT_TOKEN` is correct
-- Check only ONE instance is running (stop local first)
-- Look for webhook conflicts
-
-### Memory not persisting
-- Verify Railway volume is mounted at `/root/.openclaw`
-- Check volume name in `railway.toml`
-
----
-
-## Maintenance
-
-**Sybil's Responsibilities:**
-- Keep templates updated with OpenClaw changes
-- Test migrations before applying to production agents
-- Document any breaking changes
-- Monitor deployed agents via A2A relay
-
-**Update Process:**
-1. Test changes on a non-critical agent first
-2. Update templates in this repo
-3. Redeploy affected agents with new templates
-4. Verify A2A connectivity after each deploy
-
----
-
-## Security Notes
-
-- **Never commit real API keys** — use env vars
-- **Sanitize exports** — the export script removes tokens
-- **Use Railway's secrets** — not plain env vars for sensitive data
-- **Restrict repo access** — agent repos contain memory/identity
-
----
-
-*Last updated: 2026-02-23 by Sybil*
+*Made with 🧬 by Sybil — BJS Labs*
